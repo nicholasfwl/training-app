@@ -118,7 +118,6 @@ body{display:flex;justify-content:center;}
 .no-data{text-align:center;padding:40px 20px;}
 .no-data-title{font-family:var(--fd);font-size:16px;font-weight:700;color:var(--text2);margin-bottom:8px;}
 .no-data-sub{font-size:13px;color:var(--text3);line-height:1.6;}
-
 .auto-note{font-size:10px;color:var(--text3);text-align:center;margin-top:10px;font-style:italic;}
 
 .bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;display:flex;background:rgba(14,14,12,0.94);border-top:0.5px solid var(--border);padding:12px 0 calc(12px + env(safe-area-inset-bottom,0px));backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}
@@ -138,7 +137,6 @@ body{display:flex;justify-content:center;}
     </div>
   </div>
 
-  <!-- Sessions view -->
   <div id="view-sessions" class="view active">
     <div class="week-nav">
       <button class="wn-btn" id="prev-week" onclick="changeWeek(-1)">&#8592;</button>
@@ -156,7 +154,6 @@ body{display:flex;justify-content:center;}
     <div class="content" id="session-content"></div>
   </div>
 
-  <!-- Trends view -->
   <div id="view-trends" class="view">
     <div class="trends-content">
       <div class="sec-label">Exercise</div>
@@ -164,7 +161,7 @@ body{display:flex;justify-content:center;}
         <select class="ex-select" id="ex-select" onchange="renderGraph()">
           <optgroup label="Pull — Back &amp; Biceps">
             <option value="0-0">Conventional deadlift</option>
-            <option value="0-1">Pull-ups</option>
+            <option value="0-1">Pull-ups (reps)</option>
             <option value="0-2">Lat pulldown</option>
             <option value="0-3">Seated cable row</option>
             <option value="0-4">Face pulls</option>
@@ -177,7 +174,7 @@ body{display:flex;justify-content:center;}
             <option value="1-3">Lateral raise</option>
             <option value="1-4">Cable tricep pushdown</option>
             <option value="1-5">Overhead tricep extension</option>
-            <option value="1-6">Face pulls</option>
+            <option value="1-6">Face pulls (push day)</option>
           </optgroup>
           <optgroup label="Legs">
             <option value="2-0">Barbell back squat</option>
@@ -199,6 +196,9 @@ body{display:flex;justify-content:center;}
 </div>
 
 <script>
+// BW = true means bodyweight only, no load input
+// def = null means unknown starting weight, show editable input defaulting to 0
+// def = number means known starting weight
 const SESSIONS = [
   {
     name:'Back & Biceps',
@@ -206,7 +206,7 @@ const SESSIONS = [
     tabClass:'pull',
     exercises:[
       {name:'Conventional deadlift',sets:3,reps:'5',rest:'2 min',def:75,compound:true},
-      {name:'Pull-ups',sets:3,reps:'Max',rest:'90 sec',def:null},
+      {name:'Pull-ups',sets:3,reps:'Max',rest:'90 sec',bw:true},
       {name:'Lat pulldown',sets:3,reps:'8–10',rest:'90 sec',def:39},
       {name:'Seated cable row',sets:3,reps:'12',rest:'60 sec',def:39},
       {name:'Face pulls',sets:3,reps:'15',rest:'60 sec',def:21},
@@ -222,8 +222,8 @@ const SESSIONS = [
       {name:'Incline DB press',sets:3,reps:'10–12',rest:'90 sec',def:20,compound:true},
       {name:'Seated DB shoulder press',sets:3,reps:'10–12',rest:'90 sec',def:25},
       {name:'Lateral raise',sets:3,reps:'15',rest:'60 sec',def:10},
-      {name:'Cable tricep pushdown',sets:3,reps:'12–15',rest:'60 sec',def:null},
-      {name:'Overhead tricep extension',sets:2,reps:'12',rest:'60 sec',def:null},
+      {name:'Cable tricep pushdown',sets:3,reps:'12–15',rest:'60 sec',def:0},
+      {name:'Overhead tricep extension',sets:2,reps:'12',rest:'60 sec',def:0},
       {name:'Face pulls',sets:2,reps:'15',rest:'60 sec',def:21},
     ]
   },
@@ -235,142 +235,119 @@ const SESSIONS = [
       {name:'Barbell back squat',sets:3,reps:'6–8',rest:'2 min',def:45,compound:true},
       {name:'Romanian deadlift',sets:3,reps:'10–12',rest:'90 sec',def:50,compound:true},
       {name:'Bulgarian split squat',sets:3,reps:'10/side',rest:'90 sec',def:15},
-      {name:'Hamstring curl',sets:3,reps:'12–15',rest:'60 sec',def:null},
-      {name:'Calf raises',sets:3,reps:'15–20',rest:'45 sec',def:null},
+      {name:'Hamstring curl',sets:3,reps:'12–15',rest:'60 sec',def:0},
+      {name:'Calf raises',sets:3,reps:'15–20',rest:'45 sec',def:0},
     ]
   }
 ];
 
 const TOTAL_WEEKS = 6;
 
-let S = {
-  week: 1,
-  session: 0,
-  checked: {},
-  loads: {},
-  dates: {},
-  notes: {},
-  showDatePicker: {}
-};
+let S = {week:1,session:0,checked:{},loads:{},dates:{},notes:{},showDatePicker:{}};
+try{const d=JSON.parse(localStorage.getItem('ntv5'));if(d)S={...S,...d};}catch(e){}
+const save=()=>{try{localStorage.setItem('ntv5',JSON.stringify(S));}catch(e){}};
 
-try {
-  const d = JSON.parse(localStorage.getItem('ntv5'));
-  if (d) S = {...S, ...d};
-} catch(e) {}
+function todayISO(){return new Date().toISOString().split('T')[0];}
 
-const save = () => {
-  try { localStorage.setItem('ntv5', JSON.stringify(S)); } catch(e) {}
-};
-
-function todayStr() {
-  return new Date().toISOString().split('T')[0];
+function formatDate(iso){
+  if(!iso)return 'Set date';
+  const d=new Date(iso+'T00:00:00');
+  return d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
 }
 
-function formatDate(isoStr) {
-  if (!isoStr) return 'Set date';
-  const d = new Date(isoStr + 'T00:00:00');
-  return d.toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'});
-}
-
-function getLoad(sess, exIdx, week) {
-  for (let w = week; w >= 1; w--) {
-    const k = `${sess}-${exIdx}-w${w}`;
-    if (S.loads[k] !== undefined) return S.loads[k];
+function getLoad(sess,exIdx,week){
+  for(let w=week;w>=1;w--){
+    const k=`${sess}-${exIdx}-w${w}`;
+    if(S.loads[k]!==undefined)return S.loads[k];
   }
-  return SESSIONS[sess].exercises[exIdx].def;
+  const ex=SESSIONS[sess].exercises[exIdx];
+  if(ex.bw)return null;
+  return ex.def!==undefined?ex.def:0;
 }
 
-function setLoad(sess, exIdx, week, val) {
-  const k = `${sess}-${exIdx}-w${week}`;
-  S.loads[k] = parseFloat(val) || 0;
+function setLoad(sess,exIdx,week,val){
+  S.loads[`${sess}-${exIdx}-w${week}`]=parseFloat(val)||0;
   save();
 }
 
-function toggleCheck(key) {
-  S.checked[key] = !S.checked[key];
-  save();
-  renderSession();
+function toggleCheck(key){S.checked[key]=!S.checked[key];save();renderSession();}
+function saveNote(key,val){S.notes[key]=val;save();}
+
+function setDate(sess,week,val){
+  S.dates[`${sess}-w${week}`]=val;
+  S.showDatePicker[`${sess}-w${week}`]=false;
+  save();renderSession();
 }
 
-function saveNote(key, val) {
-  S.notes[key] = val;
-  save();
+function toggleDatePicker(sess,week){
+  const k=`${sess}-w${week}`;
+  S.showDatePicker[k]=!S.showDatePicker[k];
+  save();renderSession();
 }
 
-function setDate(sess, week, val) {
-  S.dates[`${sess}-w${week}`] = val;
-  S.showDatePicker[`${sess}-w${week}`] = false;
-  save();
-  renderSession();
+function changeWeek(d){
+  S.week=Math.max(1,Math.min(TOTAL_WEEKS,S.week+d));
+  save();renderWeekHeader();renderSession();
 }
 
-function toggleDatePicker(sess, week) {
-  const k = `${sess}-w${week}`;
-  S.showDatePicker[k] = !S.showDatePicker[k];
-  save();
-  renderSession();
+function renderWeekHeader(){
+  document.getElementById('wnum').textContent=`Week ${S.week} of ${TOTAL_WEEKS}`;
+  document.getElementById('wpill').textContent=`Wk ${S.week}`;
+  document.getElementById('prev-week').disabled=S.week===1;
+  document.getElementById('next-week').disabled=S.week===TOTAL_WEEKS;
 }
 
-function changeWeek(d) {
-  S.week = Math.max(1, Math.min(TOTAL_WEEKS, S.week + d));
-  save();
-  renderWeekHeader();
-  renderSession();
-}
-
-function renderWeekHeader() {
-  document.getElementById('wnum').textContent = `Week ${S.week} of ${TOTAL_WEEKS}`;
-  document.getElementById('wpill').textContent = `Wk ${S.week}`;
-  document.getElementById('prev-week').disabled = S.week === 1;
-  document.getElementById('next-week').disabled = S.week === TOTAL_WEEKS;
-}
-
-function selectSession(i) {
-  S.session = i;
-  save();
-  document.querySelectorAll('.stab').forEach((el, idx) => {
-    el.className = `stab ${SESSIONS[idx].tabClass}${idx === i ? ' active' : ''}`;
+function selectSession(i){
+  S.session=i;save();
+  document.querySelectorAll('.stab').forEach((el,idx)=>{
+    el.className=`stab ${SESSIONS[idx].tabClass}${idx===i?' active':''}`;
   });
   renderSession();
 }
 
-function renderSession() {
-  const s = S.session, w = S.week;
-  const sess = SESSIONS[s];
-  const el = document.getElementById('session-content');
-  const dateKey = `${s}-w${w}`;
-  const dateVal = S.dates[dateKey] || '';
-  const showPicker = S.showDatePicker[dateKey] || false;
-  const noteKey = `note-${s}-w${w}`;
-  const savedNote = S.notes[noteKey] || '';
+function renderSession(){
+  const s=S.session,w=S.week;
+  const sess=SESSIONS[s];
+  const el=document.getElementById('session-content');
+  const dateKey=`${s}-w${w}`;
+  const dateVal=S.dates[dateKey]||'';
+  const showPicker=S.showDatePicker[dateKey]||false;
+  const noteKey=`note-${s}-w${w}`;
+  const savedNote=S.notes[noteKey]||'';
+  const exs=sess.exercises;
+  const done=exs.filter((_,i)=>S.checked[`${s}-${i}-w${w}`]).length;
+  const pct=Math.round(done/exs.length*100);
 
-  const exs = sess.exercises;
-  const done = exs.filter((_, i) => S.checked[`${s}-${i}-w${w}`]).length;
-  const pct = Math.round(done / exs.length * 100);
+  const rows=exs.map((ex,i)=>{
+    const key=`${s}-${i}-w${w}`;
+    const isDone=!!S.checked[key];
+    const compTag=ex.compound?`<span class="tag tc">compound</span>`:'';
 
-  const rows = exs.map((ex, i) => {
-    const key = `${s}-${i}-w${w}`;
-    const isDone = !!S.checked[key];
-    const loadVal = getLoad(s, i, w);
-    const compTag = ex.compound ? `<span class="tag tc">compound</span>` : '';
-    const loadEl = loadVal === null
-      ? `<span class="bw-label">BW / TBD</span>`
-      : `<input class="load-input" type="number" value="${loadVal}" step="2.5" onchange="setLoad(${s},${i},${w},this.value)"/><div class="load-unit">kg</div>`;
-    return `<div class="ex-row${isDone ? ' done-row' : ''}">
-      <button class="chk${isDone ? ' done' : ''}" onclick="toggleCheck('${key}')"></button>
+    let loadEl;
+    if(ex.bw){
+      // Pure bodyweight — just show BW label, no input
+      loadEl=`<span class="bw-label">BW</span>`;
+    } else {
+      // Everything else gets an editable input — including exercises starting at 0
+      const loadVal=getLoad(s,i,w);
+      loadEl=`<input class="load-input" type="number" value="${loadVal}" step="2.5" placeholder="0" onchange="setLoad(${s},${i},${w},this.value)"/><div class="load-unit">kg</div>`;
+    }
+
+    return`<div class="ex-row${isDone?' done-row':''}">
+      <button class="chk${isDone?' done':''}" onclick="toggleCheck('${key}')"></button>
       <div class="exb">
-        <div class="exn${isDone ? ' struck' : ''}">${ex.name}</div>
+        <div class="exn${isDone?' struck':''}">${ex.name}</div>
         <div class="exd"><span class="exm">${ex.sets} × ${ex.reps} · ${ex.rest}</span>${compTag}</div>
       </div>
       <div class="exl">${loadEl}</div>
     </div>`;
   }).join('');
 
-  const pickerHtml = showPicker
-    ? `<div class="date-picker-wrap"><input type="date" value="${dateVal}" onchange="setDate(${s},${w},this.value)" /></div>`
-    : '';
+  const pickerHtml=showPicker
+    ?`<div class="date-picker-wrap"><input type="date" value="${dateVal}" onchange="setDate(${s},${w},this.value)"/></div>`
+    :'';
 
-  el.innerHTML = `
+  el.innerHTML=`
     <span class="phase-badge">Phase 1 — Foundation</span>
     <div class="scard">
       <div class="shead">
@@ -380,7 +357,7 @@ function renderSession() {
         </div>
         <button class="date-btn" onclick="toggleDatePicker(${s},${w})">
           <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          ${dateVal ? formatDate(dateVal) : 'Set date'}
+          ${dateVal?formatDate(dateVal):'Set date'}
         </button>
       </div>
       ${pickerHtml}
@@ -391,94 +368,96 @@ function renderSession() {
 }
 
 // Trends
-function getExerciseHistory(sessIdx, exIdx) {
-  const history = [];
-  for (let w = 1; w <= TOTAL_WEEKS; w++) {
-    const dateKey = `${sessIdx}-w${w}`;
-    const loadKey = `${sessIdx}-${exIdx}-w${w}`;
-    const date = S.dates[dateKey];
-    const load = S.loads[loadKey];
-    if (date && load !== undefined && load > 0) {
-      history.push({date, load, week: w});
+function getExerciseHistory(sessIdx,exIdx){
+  const history=[];
+  for(let w=1;w<=TOTAL_WEEKS;w++){
+    const dateKey=`${sessIdx}-w${w}`;
+    const loadKey=`${sessIdx}-${exIdx}-w${w}`;
+    const date=S.dates[dateKey];
+    const load=S.loads[loadKey];
+    if(date&&load!==undefined&&load>0){
+      history.push({date,load,week:w});
     }
   }
-  return history.sort((a, b) => new Date(a.date) - new Date(b.date));
+  return history.sort((a,b)=>new Date(a.date)-new Date(b.date));
 }
 
-function renderGraph() {
-  const sel = document.getElementById('ex-select').value;
-  const [sStr, eStr] = sel.split('-');
-  const sessIdx = parseInt(sStr), exIdx = parseInt(eStr);
-  const ex = SESSIONS[sessIdx].exercises[exIdx];
-  const history = getExerciseHistory(sessIdx, exIdx);
-  const el = document.getElementById('graph-area');
+function renderGraph(){
+  const sel=document.getElementById('ex-select').value;
+  const[sStr,eStr]=sel.split('-');
+  const sessIdx=parseInt(sStr),exIdx=parseInt(eStr);
+  const ex=SESSIONS[sessIdx].exercises[exIdx];
+  const history=getExerciseHistory(sessIdx,exIdx);
+  const el=document.getElementById('graph-area');
 
-  if (history.length === 0) {
-    el.innerHTML = `
-      <div class="no-data">
-        <div class="no-data-title">No data yet</div>
-        <div class="no-data-sub">Set a date on your session and log weights — they'll appear here automatically.</div>
-      </div>`;
+  if(history.length===0){
+    el.innerHTML=`<div class="no-data">
+      <div class="no-data-title">No data yet</div>
+      <div class="no-data-sub">Set a date on your session and log a weight — it'll appear here automatically.</div>
+    </div>`;
     return;
   }
 
-  const current = history[history.length - 1].load;
-  const start = history[0].load;
-  const diff = current - start;
-  const pctChange = start > 0 ? ((diff / start) * 100).toFixed(1) : 0;
-  const trendHtml = diff >= 0
-    ? `<span class="graph-trend-pos">↑ +${pctChange}%</span>`
-    : `<span class="graph-trend-neu">↓ ${pctChange}%</span>`;
+  const current=history[history.length-1].load;
+  const start=history[0].load;
+  const diff=parseFloat((current-start).toFixed(1));
+  const pctChange=start>0?((diff/start)*100).toFixed(1):0;
+  const trendHtml=diff>=0
+    ?`<span class="graph-trend-pos">↑ +${pctChange}%</span>`
+    :`<span class="graph-trend-neu">↓ ${Math.abs(pctChange)}%</span>`;
 
-  const W = 260, H = 80;
-  const loads = history.map(h => h.load);
-  const minL = Math.min(...loads) * 0.95;
-  const maxL = Math.max(...loads) * 1.05;
-  const xS = i => (i / (history.length - 1 || 1)) * W;
-  const yS = v => H - ((v - minL) / (maxL - minL || 1)) * H;
+  const W=260,H=80;
+  const loads=history.map(h=>h.load);
+  const minL=Math.min(...loads)*0.93;
+  const maxL=Math.max(...loads)*1.07;
+  const xS=i=>(history.length>1?(i/(history.length-1))*W:W/2);
+  const yS=v=>H-((v-minL)/(maxL-minL||1))*H;
 
-  const pts = history.map((h, i) => ({x: xS(i), y: yS(h.load), date: h.date, load: h.load}));
-  const last = pts[pts.length - 1];
-  const poly = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-  const area = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)} ` +
-    pts.slice(1).map(p => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') +
+  const pts=history.map((h,i)=>({x:xS(i),y:yS(h.load),date:h.date,load:h.load}));
+  const last=pts[pts.length-1];
+  const poly=pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const area=`M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)} `+
+    pts.slice(1).map(p=>`L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')+
     ` L${last.x.toFixed(1)},${H} L${pts[0].x.toFixed(1)},${H} Z`;
 
-  const maxLabels = Math.min(history.length, 5);
-  const step = Math.max(1, Math.floor((history.length - 1) / (maxLabels - 1)));
-  const labelIndices = [];
-  for (let i = 0; i < history.length; i += step) labelIndices.push(i);
-  if (!labelIndices.includes(history.length - 1)) labelIndices.push(history.length - 1);
+  const labelIndices=[];
+  const maxLabels=Math.min(history.length,5);
+  if(history.length===1){labelIndices.push(0);}
+  else{
+    const step=Math.max(1,Math.floor((history.length-1)/(maxLabels-1)));
+    for(let i=0;i<history.length;i+=step)labelIndices.push(i);
+    if(!labelIndices.includes(history.length-1))labelIndices.push(history.length-1);
+  }
 
-  const xLabels = labelIndices.map(i => {
-    const d = new Date(history[i].date + 'T00:00:00');
-    const lbl = d.toLocaleDateString('en-GB', {day:'numeric', month:'short'});
-    const anchor = i === 0 ? 'start' : i === history.length - 1 ? 'end' : 'middle';
-    return `<text x="${xS(i).toFixed(1)}" y="${H + 14}" fill="#4A4A46" font-size="8" font-family="Inter" text-anchor="${anchor}">${lbl}</text>`;
+  const xLabels=labelIndices.map(i=>{
+    const d=new Date(history[i].date+'T00:00:00');
+    const lbl=d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    const anchor=i===0?'start':i===history.length-1?'end':'middle';
+    return`<text x="${xS(i).toFixed(1)}" y="${H+14}" fill="#4A4A46" font-size="8" font-family="Inter" text-anchor="${anchor}">${lbl}</text>`;
   }).join('');
 
-  const dots = pts.map((p, i) => {
-    const isLast = i === pts.length - 1;
+  const dots=pts.map((p,i)=>{
+    const isLast=i===pts.length-1;
     return isLast
-      ? `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#C8F060"/><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="8" fill="#C8F060" opacity="0.15"/>`
-      : `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#C8F060"/>`;
+      ?`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#C8F060"/><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="8" fill="#C8F060" opacity="0.15"/>`
+      :`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#C8F060"/>`;
   }).join('');
 
-  el.innerHTML = `
+  el.innerHTML=`
     <div class="stats-row">
       <div class="stat-card"><div class="stat-val accent">${current}</div><div class="stat-label">Current kg</div></div>
       <div class="stat-card"><div class="stat-val">${start}</div><div class="stat-label">Start kg</div></div>
-      <div class="stat-card"><div class="stat-val accent">${diff >= 0 ? '+' : ''}${diff.toFixed(1)}</div><div class="stat-label">Progress</div></div>
+      <div class="stat-card"><div class="stat-val accent">${diff>=0?'+':''}${diff}</div><div class="stat-label">Progress</div></div>
     </div>
     <div class="graph-card">
       <div class="graph-top">
         <div>
           <div class="graph-title">${ex.name}</div>
-          <div class="graph-sub">${history.length} session${history.length > 1 ? 's' : ''} logged</div>
+          <div class="graph-sub">${history.length} session${history.length>1?'s':''} logged</div>
         </div>
         ${trendHtml}
       </div>
-      <svg width="100%" height="${H + 18}" viewBox="-2 0 ${W + 20} ${H + 18}" preserveAspectRatio="none">
+      <svg width="100%" height="${H+18}" viewBox="-2 0 ${W+20} ${H+18}" preserveAspectRatio="none">
         <defs>
           <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stop-color="#C8F060" stop-opacity="0.2"/>
@@ -489,7 +468,7 @@ function renderGraph() {
         <line x1="0" y1="${(H*0.5).toFixed(1)}" x2="${W}" y2="${(H*0.5).toFixed(1)}" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
         <line x1="0" y1="${(H*0.75).toFixed(1)}" x2="${W}" y2="${(H*0.75).toFixed(1)}" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
         <path d="${area}" fill="url(#ag)"/>
-        ${pts.length > 1 ? `<polyline points="${poly}" fill="none" stroke="#C8F060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>` : ''}
+        ${pts.length>1?`<polyline points="${poly}" fill="none" stroke="#C8F060" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`:''}
         ${dots}
         ${xLabels}
       </svg>
@@ -497,19 +476,16 @@ function renderGraph() {
     </div>`;
 }
 
-function switchView(v) {
-  ['sessions', 'trends'].forEach(x => {
-    document.getElementById('view-' + x).classList.toggle('active', x === v);
-    document.getElementById('nav-' + x).classList.toggle('active', x === v);
+function switchView(v){
+  ['sessions','trends'].forEach(x=>{
+    document.getElementById('view-'+x).classList.toggle('active',x===v);
+    document.getElementById('nav-'+x).classList.toggle('active',x===v);
   });
-  if (v === 'trends') renderGraph();
+  if(v==='trends')renderGraph();
 }
 
-// Init
-const now = new Date();
-document.getElementById('hdate').textContent = now.toLocaleDateString('en-GB', {
-  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-});
+const now=new Date();
+document.getElementById('hdate').textContent=now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 renderWeekHeader();
 renderSession();
 </script>
